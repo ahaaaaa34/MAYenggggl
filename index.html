@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f0f1e">
+  <title>英単語学習</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="英単語">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    html, body {
+      height: 100%; width: 100%; overflow: hidden;
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f0f1e; color: #f0f0ff;
+    }
+
+    /* ─── SCREENS ─── */
+    .screen { position: fixed; inset: 0; display: none; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ════════ HOME ════════ */
+    #screen-home {
+      background: linear-gradient(160deg, #0f0f1e 0%, #1a1a35 100%);
+      align-items: center; justify-content: center;
+      padding: env(safe-area-inset-top,44px) 24px env(safe-area-inset-bottom,24px);
+      gap: 0;
+    }
+    .home-logo {
+      font-size: 48px; font-weight: 800; letter-spacing: -1px;
+      background: linear-gradient(135deg, #6ee7f7, #a78bfa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    .home-sub {
+      font-size: 14px; color: #888aaa; margin-bottom: 52px; font-weight: 400;
+    }
+    .home-count {
+      font-size: 13px; color: #6ee7f7; margin-bottom: 32px; font-weight: 600;
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    .home-btn-group { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 320px; }
+    .home-btn {
+      width: 100%; padding: 20px; border-radius: 20px; border: none;
+      font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: transform .12s, box-shadow .12s;
+    }
+    .home-btn:active { transform: scale(0.96); }
+    .home-btn-primary {
+      background: linear-gradient(135deg, #4f8ef7, #a78bfa);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(79,142,247,0.35);
+    }
+    .home-btn-secondary {
+      background: rgba(255,255,255,0.06);
+      color: #f0f0ff;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .home-btn-arrow { font-size: 22px; opacity: 0.7; }
+
+    /* ════════ FLASHCARD ════════ */
+    #screen-fc {
+      background: linear-gradient(160deg, #0f0f1e 0%, #1a1a35 100%);
+      padding: env(safe-area-inset-top,44px) 0 0;
+    }
+
+    /* Header */
+    .fc-header {
+      display: flex; align-items: center; padding: 8px 16px 8px;
+      flex-shrink: 0; gap: 12px;
+    }
+    .fc-back-btn {
+      background: none; border: none; color: #888aaa; font-size: 28px;
+      cursor: pointer; padding: 4px; line-height: 1; font-family: inherit;
+    }
+    .fc-progress-text {
+      font-size: 14px; font-weight: 600; color: #888aaa; flex: 1; text-align: center;
+    }
+    .fc-spacer { width: 36px; }
+
+    /* Progress bar */
+    .fc-bar-bg {
+      height: 3px; background: rgba(255,255,255,0.08); flex-shrink: 0; margin: 0 16px 4px;
+      border-radius: 2px; overflow: hidden;
+    }
+    .fc-bar-fill { height: 100%; background: linear-gradient(90deg,#4f8ef7,#a78bfa); border-radius: 2px; transition: width .3s ease; }
+
+    /* Level badge */
+    .fc-level-wrap { text-align: center; padding: 4px 0 8px; flex-shrink: 0; }
+    .level-badge {
+      display: inline-block; padding: 4px 14px; border-radius: 20px;
+      font-size: 12px; font-weight: 700; letter-spacing: .5px;
+    }
+    .lv-3    { background: rgba(79,142,247,0.2); color: #6ee7f7; }
+    .lv-pre2 { background: rgba(167,139,250,0.2); color: #c4b5fd; }
+    .lv-2    { background: rgba(251,146,60,0.2); color: #fbbf24; }
+    .lv-pre1 { background: rgba(248,113,113,0.2); color: #f87171; }
+
+    /* Card area */
+    .fc-card-wrap {
+      flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+      padding: 8px 20px;
+      perspective: 1000px;
+    }
+    .fc-card {
+      width: 100%; max-width: 420px;
+      height: 100%;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .fc-face {
+      position: absolute; inset: 0;
+      border-radius: 28px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 28px;
+    }
+    .fc-front {
+      background: linear-gradient(145deg, #1e1e38, #262645);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .fc-back {
+      background: linear-gradient(145deg, #1e2e3a, #1a2f45);
+      border: 1px solid rgba(110,231,247,0.15);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      justify-content: flex-start;
+      overflow-y: auto;
+      padding-top: 36px;
+      display: none;
+    }
+
+    .fc-hint { font-size: 13px; color: #555577; margin-bottom: 20px; font-weight: 400; }
+    #fc-front-word {
+      font-size: clamp(32px, 8vw, 52px);
+      font-weight: 800;
+      color: #f0f0ff;
+      text-align: center;
+      letter-spacing: -1px;
+      line-height: 1.15;
+    }
+    #fc-back-answer {
+      font-size: clamp(28px, 7vw, 44px);
+      font-weight: 800;
+      color: #6ee7f7;
+      text-align: center;
+      letter-spacing: -0.5px;
+      margin-bottom: 20px;
+      width: 100%;
+    }
+    #fc-back-ex {
+      font-size: 14px; font-weight: 400; color: #9999bb; line-height: 1.7;
+      text-align: left; width: 100%;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding-top: 16px; margin-top: 4px;
+    }
+    #fc-back-ex mark {
+      background: none;
+      color: #fbbf24;
+      font-weight: 700;
+    }
+    #fc-back-exja {
+      font-size: 12px; font-weight: 400; color: #666688; line-height: 1.6;
+      text-align: left; width: 100%;
+      margin-top: 6px;
+      font-style: italic;
+    }
+    .speak-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 22px; padding: 8px; margin-top: 12px;
+      opacity: 0.55; transition: opacity .15s, transform .1s;
+      line-height: 1; flex-shrink: 0;
+    }
+    .speak-btn:active { opacity: 1; transform: scale(1.2); }
+    .speak-btn-back { margin-top: 0; margin-bottom: 4px; align-self: flex-end; }
+
+    /* Bottom buttons */
+    .fc-bottom {
+      flex-shrink: 0; padding: 12px 20px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 16px));
+    }
+    #fc-btn-show {
+      width: 100%; padding: 18px; border-radius: 18px; border: none;
+      background: rgba(255,255,255,0.07);
+      color: #f0f0ff; font-family: inherit; font-size: 16px; font-weight: 600;
+      cursor: pointer; transition: background .12s;
+    }
+    #fc-btn-show:active { background: rgba(255,255,255,0.12); }
+
+    #fc-btn-row {
+      display: none; gap: 12px;
+    }
+    .fc-grade-btn {
+      flex: 1; padding: 18px 10px; border-radius: 18px; border: none;
+      font-family: inherit; font-size: 16px; font-weight: 700;
+      cursor: pointer; transition: transform .1s, box-shadow .1s;
+    }
+    .fc-grade-btn:active { transform: scale(0.95); }
+    #fc-btn-wrong {
+      background: rgba(248,113,113,0.15);
+      color: #f87171;
+      border: 1px solid rgba(248,113,113,0.3);
+    }
+    #fc-btn-correct {
+      background: rgba(74,222,128,0.15);
+      color: #4ade80;
+      border: 1px solid rgba(74,222,128,0.3);
+    }
+
+    /* ════════ RESULT ════════ */
+    #screen-result {
+      background: linear-gradient(160deg, #0f0f1e 0%, #1a1a35 100%);
+      align-items: center; justify-content: center;
+      padding: env(safe-area-inset-top,44px) 24px env(safe-area-inset-bottom,24px);
+      gap: 0;
+    }
+    .res-title {
+      font-size: 32px; font-weight: 800; margin-bottom: 8px;
+      background: linear-gradient(135deg, #6ee7f7, #a78bfa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .res-sub { font-size: 14px; color: #888aaa; margin-bottom: 40px; }
+    .res-stats { display: flex; gap: 20px; margin-bottom: 48px; }
+    .res-stat {
+      background: rgba(255,255,255,0.05); border-radius: 20px;
+      padding: 24px 28px; text-align: center;
+      border: 1px solid rgba(255,255,255,0.08);
+      min-width: 100px;
+    }
+    .res-stat-num { font-size: 40px; font-weight: 800; }
+    .res-stat-lbl { font-size: 13px; color: #888aaa; margin-top: 4px; font-weight: 400; }
+    .res-correct .res-stat-num { color: #4ade80; }
+    .res-wrong .res-stat-num { color: #f87171; }
+    .res-btn-group { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 300px; }
+    .res-btn {
+      width: 100%; padding: 18px; border-radius: 18px; border: none;
+      font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer;
+      transition: transform .1s;
+    }
+    .res-btn:active { transform: scale(0.96); }
+    #btn-retry {
+      background: linear-gradient(135deg, #4f8ef7, #a78bfa);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(79,142,247,0.35);
+    }
+    #btn-result-home {
+      background: rgba(255,255,255,0.06);
+      color: #f0f0ff;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════ HOME ══════════ -->
+  <div id="screen-home" class="screen active">
+    <div class="home-logo">英単語</div>
+    <div class="home-sub">英検対策フラッシュカード</div>
+    <div class="home-count">77 WORDS</div>
+    <div class="home-btn-group">
+      <button id="btn-en-jp" class="home-btn home-btn-primary">
+        <span>英語 → 日本語</span>
+        <span class="home-btn-arrow">→</span>
+      </button>
+      <button id="btn-jp-en" class="home-btn home-btn-secondary">
+        <span>日本語 → 英語</span>
+        <span class="home-btn-arrow">→</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════ FLASHCARD ══════════ -->
+  <div id="screen-fc" class="screen">
+    <div class="fc-header">
+      <button class="fc-back-btn" id="btn-back-home">‹</button>
+      <div class="fc-progress-text" id="fc-progress">1 / 77</div>
+      <div class="fc-spacer"></div>
+    </div>
+    <div class="fc-bar-bg">
+      <div class="fc-bar-fill" id="fc-bar" style="width:0%"></div>
+    </div>
+    <div class="fc-level-wrap">
+      <span class="level-badge lv-3" id="fc-level">3級</span>
+    </div>
+
+    <div class="fc-card-wrap">
+      <div class="fc-card" id="fc-card">
+        <!-- FRONT -->
+        <div class="fc-face fc-front">
+          <div class="fc-hint">タップして答えを見る</div>
+          <div id="fc-front-word">species</div>
+          <button class="speak-btn" id="fc-speak-front" title="発音を聞く">📢</button>
+        </div>
+        <!-- BACK -->
+        <div class="fc-face fc-back">
+          <button class="speak-btn speak-btn-back" id="fc-speak-back" title="発音を聞く">📢</button>
+          <div id="fc-back-answer">種</div>
+          <div id="fc-back-ex"></div>
+          <div id="fc-back-exja"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fc-bottom">
+      <button id="fc-btn-show">答えを見る</button>
+      <div id="fc-btn-row">
+        <button class="fc-grade-btn" id="fc-btn-wrong">✗ わからない</button>
+        <button class="fc-grade-btn" id="fc-btn-correct">✓ わかった</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ RESULT ══════════ -->
+  <div id="screen-result" class="screen">
+    <div class="res-title">完了！</div>
+    <div class="res-sub">セッション終了</div>
+    <div class="res-stats">
+      <div class="res-stat res-correct">
+        <div class="res-stat-num" id="res-correct">0</div>
+        <div class="res-stat-lbl">わかった</div>
+      </div>
+      <div class="res-stat res-wrong">
+        <div class="res-stat-num" id="res-wrong">0</div>
+        <div class="res-stat-lbl">わからない</div>
+      </div>
+    </div>
+    <div class="res-btn-group">
+      <button id="btn-retry-wrong" class="res-btn" style="background:rgba(248,113,113,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.3);">✗ わからなかった単語だけ</button>
+      <button id="btn-retry" class="res-btn">もう一度（全単語）</button>
+      <button id="btn-result-home" class="res-btn">ホームへ</button>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
