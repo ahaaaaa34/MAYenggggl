@@ -85,7 +85,7 @@ function toast(msg) {
 }
 
 // ─── 本文の記法パーサ ───
-const TOKEN = /\[\[([^\]]+)\]\]|\(\(([^)|]+)(?:\|([^)]*))?\)\)|\{([^|}]+)\|([^}]+)\}/g;
+const TOKEN = /\[\[([^\]]+)\]\]|\(\(([^)|]+)(?:\|([^)]*))?\)\)|\{([^|}]+)\|([^}]+)\}|__([^_]+)__/g;
 
 function tokens(line) {
   const out = [];
@@ -95,7 +95,8 @@ function tokens(line) {
     if (m.index > last) out.push({ t: 'text', v: line.slice(last, m.index) });
     if (m[1] != null) out.push({ t: 'blank', k: m[1] });
     else if (m[2] != null) out.push({ t: 'ref', k: m[2], s: m[3] });
-    else out.push({ t: 'ruby', b: m[4], r: m[5] });
+    else if (m[4] != null) out.push({ t: 'ruby', b: m[4], r: m[5] });
+    else out.push({ t: 'u', v: m[6] });
     last = TOKEN.lastIndex;
   }
   if (last < line.length) out.push({ t: 'text', v: line.slice(last) });
@@ -109,6 +110,8 @@ function lineEl(line, fill) {
   for (const tk of tokens(line.slice(ind))) {
     if (tk.t === 'text') p.append(tk.v);
     else if (tk.t === 'ruby') p.append(h('ruby', null, tk.b, h('rt', null, tk.r)));
+    else if (tk.t === 'u') p.append(h('u', { class: 'ul' }, tk.v));
+    else if (!fill) p.append(tk.k);
     else if (tk.t === 'blank') p.append(fill.renderBlank(tk.k));
     else p.append(fill.renderRef(tk.k, tk.s));
   }
@@ -376,6 +379,30 @@ function thunenFigure() {
   return f;
 }
 
+// 帯グラフ（割合）
+const BAR_COLORS = ['#38bdf8', '#2dd4bf', '#818cf8', '#fbbf24', '#f472b6', '#a3e635'];
+function barsFigure(bars, unit) {
+  return h('div', { class: 'bars' }, bars.map(b => {
+    const rest = Math.max(0, 100 - b.segs.reduce((n, [, v]) => n + v, 0));
+    return h('div', { class: 'bars-item' },
+      h('div', { class: 'bars-lab' }, h('b', null, b.label), h('small', null, b.sub)),
+      h('div', { class: 'sbar' },
+        b.segs.map(([name, v], i) => h('span', { style: `width:${v}%;background:${BAR_COLORS[i % BAR_COLORS.length]}`, title: `${name} ${v.toFixed(1)}${unit}` }, v >= 5 ? v.toFixed(1) : '')),
+        h('span', { class: 'rest', style: `width:${rest}%` }, 'その他')),
+      h('div', { class: 'bars-leg' }, b.segs.map(([name, v], i) =>
+        h('span', null, h('i', { style: `background:${BAR_COLORS[i % BAR_COLORS.length]}` }), `${name} ${v.toFixed(1)}`))));
+  }), h('div', { class: 'tbl-note' }, `数値は${unit}`));
+}
+
+// 表
+function tableFigure(t) {
+  return h('div', null,
+    h('div', { class: 'tbl-wrap' }, h('table', { class: 'dtable' },
+      h('thead', null, h('tr', null, t.head.map(c => h('th', null, c)))),
+      h('tbody', null, t.rows.map(r => h('tr', null, r.map((c, i) => i === 0 ? h('th', null, c) : h('td', null, c))))))),
+    (t.notes || []).map(n => h('div', { class: 'tbl-note' }, n)));
+}
+
 // 記述問題の共通パーツ
 function createEssay({ key, st, label, model, keys, onSelf }) {
   const selfKey = key + ':self';
@@ -425,11 +452,14 @@ const KINDS = {
   // 空欄に書き込む
   blanks(q, st) {
     const fill = createFill({ blanks: q.blanks, st, ns: q.id + ':' });
-    const el = h('div', { class: 'lines' }, q.lines.map(l => {
+    const line = l => {
       const p = lineEl(l, fill);
       if (l.startsWith('【')) p.classList.add('head');
       return p;
-    }));
+    };
+    const el = h('div', { class: 'lines' },
+      (q.lines || []).map(line),
+      (q.groups || []).map(g => h('div', { class: 'grp' }, g.map(line))));
     fill.paintAll();
     return { el, check: () => fill.check(), reset: () => fill.reset() };
   },
@@ -457,33 +487,33 @@ const KINDS = {
 
     const rowEls = {};
     const resList = h('div', { class: 'cal-res' });
+    const pct = x => `${(x / months.length) * 100}%`;
     let country = '';
-    for (const r of q.rows) {
+    q.rows.forEach((r, ri) => {
+      const gr = `grid-row:${ri + 3}`;
       country = r.country || country;
       const full = country + (r.crop ? ' ' + r.crop : '');
       const mk = h('span', { class: 'mk' });
       const name = r.country
         ? h('span', { class: 'nm' }, r.country, r.crop ? h('em', null, ' ' + r.crop) : null)
         : h('span', { class: 'nm sub' }, h('em', null, r.crop));
-      grid.append(h('div', { class: 'c-lab' }, name, mk));
+      grid.append(h('div', { class: 'c-lab', style: `${gr};grid-column:1` }, name, mk));
 
       if (r.sample) {
-        const s = h('div', { class: 'c-sample' });
+        const s = h('div', { class: 'c-sample', style: gr });
         for (let i = 1; i < months.length; i++) {
-          s.append(h('span', { class: 'tick' + yb(i), style: `left:${(i / months.length) * 100}%` }));
+          s.append(h('span', { class: 'tick' + yb(i), style: `left:${pct(i)}` }));
         }
-        s.append(h('div', {
-          class: 'blk',
-          style: `left:${(r.sample.from / months.length) * 100}%;width:${((r.sample.to - r.sample.from) / months.length) * 100}%`,
-        }, '収穫'));
+        s.append(h('div', { class: 'blk', style: `left:${pct(r.sample.from)};width:${pct(r.sample.to - r.sample.from)}` }, '収穫'));
         grid.append(s);
-        continue;
+        return;
       }
 
       const on = new Set(painted[r.id] || []);
       const cells = months.map((mo, i) => {
         const c = h('div', {
-          class: 'c-cell' + yb(i) + (r.show.includes(i) ? ' mdl' : '') + (on.has(i) ? ' on' : ''),
+          class: 'c-cell' + yb(i) + (on.has(i) ? ' on' : ''),
+          style: `${gr};grid-column:${i + 2}`,
           role: 'button', 'aria-label': `${full} ${mo.y}年${mo.m}月`,
         });
         c.addEventListener('click', () => {
@@ -497,22 +527,29 @@ const KINDS = {
         grid.append(c);
         return c;
       });
+      // 解答（半月単位）の重ね表示
+      grid.append(h('div', { class: 'c-key', style: gr },
+        r.blocks.map(([a, b]) => h('i', { style: `left:${pct(a)};width:${pct(Math.min(b, months.length) - a)}` }))));
       const resEl = h('div');
       resList.append(resEl);
       rowEls[r.id] = { cells, mk, resEl, full };
-    }
+    });
 
-    const modelBtn = h('button', { class: 'btn small', type: 'button' }, '目安を表示');
+    const modelBtn = h('button', { class: 'btn small', type: 'button' }, '解答を重ねる');
     modelBtn.addEventListener('click', () => {
       const on = grid.classList.toggle('mdl-on');
-      modelBtn.textContent = on ? '目安を隠す' : '目安を表示';
+      modelBtn.textContent = on ? '解答を隠す' : '解答を重ねる';
     });
 
     const essay = createEssay({ key: q.id + ':essay', st, onSelf: ctx.rescore, ...q.essay });
     const el = h('div', null,
       h('div', { class: 'cal-note' }, '収穫する月のマスをタップして青く塗ろう（もう一度タップで消える）。表は横にスクロールできます。'),
       h('div', { class: 'cal-scroll' }, grid),
-      h('div', { class: 'cal-tools' }, h('span', { class: 'cal-legend' }, h('i'), '＝収穫'), h('span', { style: 'flex:1' }), modelBtn),
+      h('div', { class: 'cal-tools' },
+        h('span', { class: 'cal-legend' }, h('i'), '＝自分が塗った所'),
+        h('span', { class: 'cal-legend' }, h('i', { class: 'key' }), '＝解答'),
+        h('span', { style: 'flex:1' }), modelBtn),
+      q.note ? h('div', { class: 'cal-note' }, q.note) : null,
       resList,
       essay.el);
 
@@ -525,7 +562,7 @@ const KINDS = {
           total++;
           const on = new Set(painted[r.id] || []);
           const ok = new Set(r.ok);
-          const correct = [...on].every(i => ok.has(i)) && r.need.every(g => g.some(i => on.has(i)));
+          const correct = [...on].every(i => ok.has(i)) && r.core.every(i => on.has(i));
           if (correct) got++;
           const x = rowEls[r.id];
           x.cells.forEach((c, i) => c.classList.toggle('bad', on.has(i) && !ok.has(i)));
@@ -533,11 +570,11 @@ const KINDS = {
           x.mk.style.color = correct ? 'var(--ok)' : 'var(--ng)';
           x.resEl.replaceChildren(
             h('span', { class: 'nm' }, x.full),
-            h('span', null, `目安 ${r.hint}`),
+            h('span', null, r.hint),
             h('span', { class: correct ? 'ok' : 'ng' }, correct ? '✓' : '✗'));
         }
         grid.classList.add('checked', 'mdl-on');
-        modelBtn.textContent = '目安を隠す';
+        modelBtn.textContent = '解答を隠す';
         got += essay.check();
         return { got, total };
       },
@@ -550,7 +587,7 @@ const KINDS = {
           x.mk.textContent = '';
         }
         grid.classList.remove('checked', 'mdl-on');
-        modelBtn.textContent = '目安を表示';
+        modelBtn.textContent = '解答を重ねる';
         essay.reset();
       },
     };
@@ -700,15 +737,69 @@ const KINDS = {
     });
     const paint = () => btns.forEach((b, i) => b.classList.toggle('on', st.vals[key] === i));
     paint();
-    const [pre, post] = q.text.split('（ ア ）');
+    const [pre, post] = (q.text || '').split('（ ア ）');
     const el = h('div', null,
-      h('div', { class: 'conds' }, h('b', null, '【条件】'), h('ul', null, q.conditions.map(c => h('li', null, c)))),
-      h('p', { class: 'ch-text' }, pre, h('span', { class: 'slot', style: 'min-width:3em;cursor:default' }, 'ア'), post),
-      h('div', { class: 'ch-opts' }, btns));
+      q.conditions ? h('div', { class: 'conds' }, h('b', null, '【条件】'), h('ul', null, q.conditions.map(c => h('li', null, c)))) : null,
+      q.text ? h('p', { class: 'ch-text' }, pre, post != null ? [h('span', { class: 'slot', style: 'min-width:3em;cursor:default' }, 'ア'), post] : null) : null,
+      h('div', { class: q.long ? 'ch-list' : 'ch-opts' }, btns));
     return {
       el,
       check: () => ({ got: st.vals[key] === q.answer ? 1 : 0, total: 1 }),
       reset() { delete st.vals[key]; paint(); },
+    };
+  },
+
+  // 記号・国名などをボタンで選ぶ（理由を書く欄つきも可）
+  pick(q, st, ctx) {
+    const items = q.items.map(it => {
+      const key = `${q.id}:${it.id}`;
+      const btns = (it.options || q.options).map(o => h('button', { type: 'button', class: o === it.ans ? 'ans' : '' }, o));
+      const row = h('div', { class: 'pk-row' },
+        h('span', { class: 'pk-label' }, it.label, h('span', { class: 'mk' })), h('div', { class: 'pk-seg' }, btns));
+      const paintSel = () => btns.forEach(b => b.classList.toggle('on', b.textContent === st.vals[key]));
+      btns.forEach(b => b.addEventListener('click', () => {
+        if (st.vals[key] === b.textContent) delete st.vals[key]; else st.vals[key] = b.textContent;
+        paintSel();
+        save();
+        ctx.rescore();
+      }));
+      paintSel();
+      let reason = null;
+      if (it.reason) {
+        const rk = key + ':r';
+        const inp = h('input', { class: 'pk-reason', type: 'text', placeholder: '選んだ理由', autocomplete: 'off' });
+        inp.value = st.vals[rk] ?? '';
+        inp.addEventListener('input', () => { st.vals[rk] = inp.value; save(); });
+        reason = [inp, h('div', { class: 'pk-model' }, h('b', null, '理由の解答例'), it.reason)];
+      }
+      const el = h('div', { class: 'pk-item' }, row, reason);
+      return { key, ans: it.ans, el, row, paintSel, reason };
+    });
+    const el = h('div', { class: 'pk' },
+      q.lines ? h('div', { class: 'lines stmts' }, q.lines.map(l => lineEl(l, null))) : null,
+      q.optionNote ? h('div', { class: 'pk-note' }, q.optionNote) : null,
+      items.map(x => x.el));
+    return {
+      el,
+      check() {
+        let got = 0;
+        for (const x of items) {
+          const ok = st.vals[x.key] === x.ans;
+          x.row.classList.toggle('ok', ok);
+          x.row.classList.toggle('ng', !ok);
+          if (ok) got++;
+        }
+        return { got, total: items.length };
+      },
+      reset() {
+        for (const x of items) {
+          delete st.vals[x.key];
+          delete st.vals[x.key + ':r'];
+          x.row.classList.remove('ok', 'ng');
+          x.paintSel();
+          if (x.reason) x.reason[0].value = '';
+        }
+      },
     };
   },
 
@@ -725,6 +816,7 @@ function qTotal(q) {
     case 'calendar': return q.rows.filter(r => !r.sample).length + (q.essay ? 1 : 0);
     case 'hilo': return q.rows.length * q.cols.length;
     case 'wordbank': return Object.keys(q.blanks).length;
+    case 'pick': return q.items.length;
     default: return 1;
   }
 }
@@ -757,7 +849,7 @@ function renderHome() {
       h('div', { class: 'pcard-num' }, h('small', null, 'p.'), h('b', null, p.page)),
       h('div', { class: 'pcard-body' },
         h('div', { class: 'pcard-title' }, p.title),
-        h('div', { class: 'pcard-meta' }, p.type === 'fill' ? `一問一答 ${total}問` : `演習 ${p.questions.map(q => q.badge).join('・')}`),
+        h('div', { class: 'pcard-meta' }, p.type === 'fill' ? `一問一答 ${total}問` : `演習 ${[...new Set(p.questions.map(q => q.badge.replace(/問題|\s*\(\d\)$/g, '')))].join('・')}`),
         h('div', { class: 'pcard-prog' },
           h('div', { class: 'bar' }, h('i', { style: `width:${pct}%` })),
           h('span', { class: 'pcard-score' + (sc ? '' : ' none') }, sc ? `${sc.got} / ${sc.total}` : '未挑戦'))),
@@ -905,6 +997,8 @@ function renderQuizPage(page) {
       q.source ? h('div', { class: 'q-src' }, q.source) : null,
       q.img ? figure(q.img, q.imgAlt) : null,
       q.figure === 'thunen' ? thunenFigure() : null,
+      q.bars ? barsFigure(q.bars, q.barsUnit || '%') : null,
+      q.table ? tableFigure(q.table) : null,
       h('div', { class: 'q-body' }, ctl.el),
       h('div', { class: 'q-foot' },
         h('button', { class: 'btn', type: 'button', onclick: () => {
