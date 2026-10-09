@@ -839,9 +839,17 @@ function pageScore(p) {
 // ════════════════════════════════════════════
 // 画面：ホーム
 // ════════════════════════════════════════════
+const HOME_FILTERS = [
+  { id: 'all', label: 'すべて', test: () => true },
+  { id: 'fill', label: '一問一答', test: p => p.type === 'fill' },
+  { id: 'quiz', label: '演習問題', test: p => p.type === 'quiz' },
+];
+
 function renderHome() {
   document.title = BOOK.title;
-  const cards = PAGES.map(p => {
+  const filter = HOME_FILTERS.find(f => f.id === store.homeFilter) ?? HOME_FILTERS[0];
+  const pages = PAGES.filter(filter.test);
+  const cards = pages.map(p => {
     const sc = pageScore(p);
     const total = pageTotal(p);
     const pct = sc ? Math.round((sc.got / sc.total) * 100) : 0;
@@ -855,11 +863,26 @@ function renderHome() {
           h('span', { class: 'pcard-score' + (sc ? '' : ' none') }, sc ? `${sc.got} / ${sc.total}` : '未挑戦'))),
       h('span', { class: 'pcard-arrow' }, '›'));
   });
+
+  // 選んだ種類のまとめ（正解数 / 全問）
+  const total = pages.reduce((n, p) => n + pageTotal(p), 0);
+  const got = pages.reduce((n, p) => n + (pageScore(p)?.got ?? 0), 0);
+  const unit = filter.id === 'fill' ? '問' : '点';
+
+  const seg = h('div', { class: 'seg' }, HOME_FILTERS.map(f => h('button', {
+    type: 'button', class: f === filter ? 'on' : '',
+    onclick: () => { store.homeFilter = f.id; save(); renderHome(); },
+  }, f.label)));
+
   $app.replaceChildren(
     h('div', { class: 'home-hero' },
       h('div', { class: 'home-kicker' }, '地理探究'),
       h('h1', { class: 'home-title' }, BOOK.title),
       h('div', { class: 'home-chapter' }, BOOK.chapter)),
+    seg,
+    h('div', { class: 'home-sum' },
+      h('span', null, `${pages.length}ページ・${filter.id === 'all' ? '' : `全${total}${unit}`}`.replace(/・$/, '')),
+      filter.id === 'all' ? null : h('span', null, `正解 ${got} / ${total}`)),
     h('div', { class: 'home-list' }, cards),
     h('div', { class: 'home-foot' }, h('a', { href: '../' }, '← 英単語フラッシュカードへ')));
 }
