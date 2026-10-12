@@ -884,6 +884,7 @@ function renderHome() {
       h('span', null, `${pages.length}ページ・${filter.id === 'all' ? '' : `全${total}${unit}`}`.replace(/・$/, '')),
       filter.id === 'all' ? null : h('span', null, `正解 ${got} / ${total}`)),
     h('div', { class: 'home-list' }, cards),
+    installBox(),
     h('div', { class: 'home-foot' }, h('a', { href: '../' }, '← 英単語フラッシュカードへ')));
 }
 
@@ -1060,6 +1061,49 @@ function route() {
     if (page.type === 'fill') renderFillPage(page); else renderQuizPage(page);
   }
   window.scrollTo(0, 0);
+}
+
+// ════════════════════════════════════════════
+// PWA（ホーム画面に追加・オフライン）
+// ════════════════════════════════════════════
+let installPrompt = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const onHome = () => !PAGES.some(p => location.hash.replace(/^#\/?/, '') === p.id);
+
+function installBox() {
+  if (isStandalone()) return null;
+  if (installPrompt) {
+    return h('div', { class: 'install' },
+      h('b', null, '📲 アプリとして追加できます'),
+      h('p', null, 'ホーム画面から開けて，電波がなくても使えるようになります。'),
+      h('button', { class: 'btn primary', type: 'button', onclick: async () => {
+        installPrompt.prompt();
+        await installPrompt.userChoice.catch(() => {});
+        installPrompt = null;
+        if (onHome()) renderHome();
+      } }, 'ホーム画面に追加'));
+  }
+  if (isIOS()) {
+    return h('div', { class: 'install' },
+      h('b', null, '📲 アプリとして使うには'),
+      h('p', null, 'Safariの共有ボタン（□↑）→「ホーム画面に追加」。ホーム画面から開けて，電波がなくても使えます。'));
+  }
+  return null;
+}
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installPrompt = e;
+  if (onHome()) renderHome();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  if (onHome()) renderHome();
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 window.addEventListener('hashchange', route);
