@@ -3,7 +3,7 @@
 //   ・最初に全ファイルを保存しておき，オフラインでも開けるようにする
 //   ・つながっているときは最新を取りに行く（遅いときは保存分を使う）
 // ════════════════════════════════════════════
-const CACHE = 'geo-v3';
+const CACHE = 'geo-v4';
 const FILES = [
   './', './index.html', './app.js', './data.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',
@@ -40,12 +40,15 @@ self.addEventListener('fetch', e => {
 });
 
 // 最新を取りに行き，失敗・時間切れなら保存分を返す
+//   ブラウザの一時保存は使わず，毎回GitHubに新しい版があるか確かめる（?v=… を付けなくても更新が出る）
 function networkFirst(e) {
   const req = e.request;
-  const net = fetch(req).then(res => {
+  const url = new URL(req.url);
+  const key = url.origin + url.pathname;          // ?v=… は保存のときは外す
+  const net = fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => {
     if (res.ok) {
       const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copy));
+      caches.open(CACHE).then(c => c.put(key, copy));
     }
     return res;
   });
