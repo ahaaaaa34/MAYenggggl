@@ -117,6 +117,9 @@
     .seg button { flex: 1; padding: 10px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--muted); }
     .seg button.on { background: var(--card2); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
     .mode-hint { font-size: 12px; color: var(--muted); margin: 8px 2px 0; line-height: 1.6; }
+    .keys-help { margin: 8px 2px 0; font-size: 12px; color: var(--muted); }
+    .keys-help summary { cursor: pointer; padding: 4px 0; color: var(--sub); }
+    .keys-help ul { margin: 6px 0 0 1.2em; line-height: 1.8; }
 
     /* ═══════ FILL (一問一答) ═══════ */
     .sec-title {
@@ -151,9 +154,9 @@
     .bk-s { color: var(--sub); }
     .bk-mark { font-size: 13px; font-weight: 800; }
     .bk.ok .bk-in { border-bottom-color: var(--ok); background: rgba(74,222,128,0.10); }
-    .bk.ok .bk-mark::after { content: '✓'; color: var(--ok); }
+    .bk.ok .bk-mark::after { content: '○'; color: var(--ok); }
     .bk.ng .bk-in { border-bottom-color: var(--ng); background: rgba(248,113,113,0.10); }
-    .bk.ng .bk-mark::after { content: '✗'; color: var(--ng); }
+    .bk.ng .bk-mark::after { content: '×'; color: var(--ng); }
     .bk-fix {
       display: none; align-items: center; gap: 6px; flex-wrap: wrap;
       font-size: 13px; line-height: 1.5; color: #fecaca;
@@ -170,6 +173,7 @@
     .bk-ans { display: none; font-size: 14px; font-weight: 700; color: var(--blank); margin: 0 4px; }
     .show-ans .bk-g:not(.ng) .bk-ans { display: inline; }
     .show-ans .bk-g.ok .bk-ans { display: none; }
+    .bk-g.ans-on .bk-ans, .show-ans .bk-g.ans-on .bk-ans { display: inline; }
 
     /* red sheet */
     .bk.sheet { cursor: pointer; padding: 0; font-size: inherit; line-height: inherit; }

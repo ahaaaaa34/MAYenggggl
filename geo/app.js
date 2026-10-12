@@ -135,10 +135,17 @@ function focusNext(inp) {
   }
 }
 
+// キーを押しっぱなしにしても連続で判定しない（判定したらキーを離すまで止める）
+const keyLock = { on: false };
+document.addEventListener('keydown', e => { if (!e.repeat) keyLock.on = false; }, true);
+document.addEventListener('keyup', () => { keyLock.on = false; }, true);
+window.addEventListener('blur', () => { keyLock.on = false; });
+
 // ════════════════════════════════════════════
 // 穴埋めコントローラ（一問一答ページ・記述の空欄で共通）
+//   quick … 一問一答のキー操作（Enterで1問ずつ採点・Spaceで○・Backspaceで戻る）
 // ════════════════════════════════════════════
-function createFill({ blanks, st, ns = '', mode = 'input', onChange }) {
+function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChange }) {
   const key = k => ns + k;
   const keys = Object.keys(blanks);
   const groups = new Map();
@@ -161,8 +168,9 @@ function createFill({ blanks, st, ns = '', mode = 'input', onChange }) {
     }
 
     const inp = h('input', {
-      class: 'bk-in', type: 'text', enterkeyhint: 'next', autocomplete: 'off',
+      class: 'bk-in', type: 'text', enterkeyhint: quick ? 'enter' : 'next', autocomplete: 'off',
       autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', 'aria-label': `空欄${label}`,
+      'data-k': k,
     });
     inp.value = st.vals[key(k)] ?? '';
     fitInput(inp);
@@ -178,7 +186,14 @@ function createFill({ blanks, st, ns = '', mode = 'input', onChange }) {
       ovr);
     const g = h('span', { class: 'bk-g' }, bk, fix, h('span', { class: 'bk-ans' }, fullAns(b)));
 
-    inp.addEventListener('input', () => {
+    inp.addEventListener('input', e => {
+      // 空欄でSpace → ○（日本語入力の全角空白・スマホの空白もここで拾う）
+      if (quick && !e.isComposing && inp.value && !inp.value.replace(/[\s　]/g, '')) {
+        inp.value = '';
+        fitInput(inp);
+        if (!keyLock.on) advance(k, 'space');
+        return;
+      }
       st.vals[key(k)] = inp.value;
       fitInput(inp);
       if (st.res[key(k)] !== undefined) {
@@ -190,9 +205,21 @@ function createFill({ blanks, st, ns = '', mode = 'input', onChange }) {
       save();
     });
     inp.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
+      const composing = e.isComposing || e.keyCode === 229;
+      if (!quick) {
+        if (e.key === 'Enter' && !composing) { e.preventDefault(); focusNext(inp); }
+        return;
+      }
+      if (e.key === 'Enter') {
+        if (composing) return;                         // 変換中のEnterは確定だけ
         e.preventDefault();
-        focusNext(inp);
+        if (!e.repeat && !keyLock.on) advance(k, 'enter');
+      } else if (e.key === ' ' && !composing && inp.value === '') {
+        e.preventDefault();
+        if (!e.repeat && !keyLock.on) advance(k, 'space');
+      } else if (e.key === 'Backspace' && !composing && inp.value === '') {
+        e.preventDefault();
+        if (!e.repeat) back(inp);
       }
     });
     ovr.addEventListener('click', () => {
@@ -205,6 +232,48 @@ function createFill({ blanks, st, ns = '', mode = 'input', onChange }) {
 
     groups.set(k, { g, bk, inp });
     return g;
+  }
+
+  // Enter：採点（空なら×）／Space：○。採点ずみならそのまま次へ
+  function advance(k, how) {
+    const x = groups.get(k);
+    if (st.res[key(k)] === undefined) {
+      const v = x.inp.value;
+      st.vals[key(k)] = v;
+      if (how === 'space') {
+        st.ovr[key(k)] = true;
+        st.res[key(k)] = true;
+      } else {
+        st.res[key(k)] = isCorrect(blanks[k], v);
+      }
+      keyLock.on = true;
+      paint(k);
+      save();
+      onChange?.();
+      if (keys.every(kk => st.res[key(kk)] !== undefined)) {
+        const got = keys.filter(kk => st.res[key(kk)] === true).length;
+        toast(got === keys.length ? `全問正解！ ${got} / ${keys.length}` : `${keys.length}問中 ${got}問 正解`);
+      }
+    }
+    focusNext(x.inp);
+  }
+
+  // 空欄でBackspace：1つ前の空欄に戻して，その○×を取り消す
+  function back(inp) {
+    const all = [...document.querySelectorAll('.bk-in')];
+    const prev = all[all.indexOf(inp) - 1];
+    if (!prev) return;
+    const pk = prev.dataset.k;
+    if (groups.has(pk)) {
+      delete st.res[key(pk)];
+      delete st.ovr[key(pk)];
+      paint(pk);
+      save();
+      onChange?.();
+    }
+    prev.focus();
+    prev.setSelectionRange(prev.value.length, prev.value.length);
+    prev.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   function renderRef(k, s) {
@@ -232,6 +301,8 @@ function createFill({ blanks, st, ns = '', mode = 'input', onChange }) {
         el.classList.toggle('ok', r === true);
         el.classList.toggle('ng', r === false);
       }
+      const exact = isCorrect({ a: blanks[k].a, s: blanks[k].s }, st.vals[key(k)]);
+      x.g.classList.toggle('ans-on', r === true && !exact);
     }
     refreshRefs();
   }
@@ -897,16 +968,25 @@ function renderFillPage(page) {
   const header = pageHeader(page);
   let reveal = false;
 
-  const fill = createFill({ blanks: page.blanks, st, mode, onChange: () => { updateScore(); updateBar(); } });
+  const fill = createFill({ blanks: page.blanks, st, mode, quick: true, onChange: () => { updateScore(); updateBar(); } });
 
   const seg = h('div', { class: 'seg' },
     ['input', 'sheet'].map(m => h('button', {
       type: 'button', class: m === mode ? 'on' : '',
       onclick: () => { if (m !== mode) { st.mode = m; save(); renderFillPage(page); } },
     }, m === 'input' ? '✏️ 入力して解く' : '🟥 赤シートで確認')));
-  const hint = h('p', { class: 'mode-hint' }, mode === 'input'
-    ? '空欄に答えを入力して「答え合わせ」。Enterで次の空欄へ。別の言い方で合っているときは「○にする」で正解にできます。'
-    : '赤いところをタップすると答えが見えます。もう一度タップで隠れます。');
+  const hint = mode === 'input'
+    ? h('details', { class: 'keys-help' },
+        h('summary', null, '⌨ Enterで1問ずつ採点・Spaceで○・Backspaceで戻る'),
+        h('ul', null,
+          h('li', null, 'Enter（答えを打ってある）→ 採点して答えを表示。合っていれば○，ちがえば×'),
+          h('li', null, 'Enter（空のまま）→ ×にして答えを表示'),
+          h('li', null, 'Space（空のまま）→ ○にして答えを表示（全角の空白でもOK）'),
+          h('li', null, 'Backspace（空のまま）→ 1つ前の空欄に戻る（○×も取り消し）'),
+          h('li', null, '変換中のEnterは確定だけ。確定のEnter → もう1回Enterで採点'),
+          h('li', null, 'スマホのキーボードの改行・空白でも同じ。押しっぱなしでも連続で判定しない'),
+          h('li', null, '別の言い方で合っているときは「○にする」で正解に。下の「答え合わせ」で全部まとめて採点もできる')))
+    : h('p', { class: 'mode-hint' }, '赤いところをタップすると答えが見えます。もう一度タップで隠れます。');
 
   const body = h('div', { class: 'fill-body' });
   for (const sec of page.sections) {
@@ -948,7 +1028,7 @@ function renderFillPage(page) {
       ? h('div', { class: 'bb-res' },
           h('span', { style: `color:${sc.got === sc.total ? 'var(--ok)' : 'var(--text)'}` }, `正解 ${sc.got} / ${sc.total}`),
           h('div', { class: 'bar' }, h('i', { style: `width:${(sc.got / sc.total) * 100}%` })),
-          wrong ? h('button', { class: 'btn small warn', type: 'button', onclick: retryWrong }, `✗ ${wrong}問やり直す`) : null)
+          wrong ? h('button', { class: 'btn small warn', type: 'button', onclick: retryWrong }, `× ${wrong}問やり直す`) : null)
       : null;
     bb.replaceChildren(
       res ?? '',
