@@ -120,13 +120,13 @@ function lineEl(line, fill) {
 
 function fitInput(inp) {
   let w = 0;
-  for (const ch of inp.value) w += /[\x20-\x7e｡-ﾟ]/.test(ch) ? 0.6 : 1;
+  for (const ch of inp.value || inp.placeholder) w += /[\x20-\x7e｡-ﾟ]/.test(ch) ? 0.6 : 1;
   inp.style.width = Math.max(4.5, w + 1.4) + 'em';
 }
 
 function focusNext(inp) {
   const all = [...document.querySelectorAll('.bk-in')];
-  const next = all[all.indexOf(inp) + 1];
+  const next = all.slice(all.indexOf(inp) + 1).find(i => !i.readOnly);
   if (next) {
     next.focus();
     next.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -172,19 +172,30 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
       autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', 'aria-label': `空欄${label}`,
       'data-k': k,
     });
-    inp.value = st.vals[key(k)] ?? '';
-    fitInput(inp);
+    const mark = h('button', { class: 'bk-mark', type: 'button', tabindex: '-1', 'aria-label': '○×を切りかえる' });
+    const was = h('s', { class: 'bk-was' });
     const bk = h('span', { class: 'bk' },
       h('span', { class: 'bk-n' }, label), inp,
       b.s ? h('span', { class: 'bk-s' }, b.s) : null,
-      h('span', { class: 'bk-mark' }));
-    const alts = (b.alt || []).slice(0, 3);
-    const ovr = h('button', { class: 'bk-ovr', type: 'button' }, '○にする');
-    const fix = h('span', { class: 'bk-fix' },
-      h('span', null, '正解 ', h('b', null, fullAns(b))),
-      alts.length ? h('small', null, `別解: ${alts.join('・')}`) : null,
-      ovr);
-    const g = h('span', { class: 'bk-g' }, bk, fix, h('span', { class: 'bk-ans' }, fullAns(b)));
+      mark);
+    const g = h('span', { class: 'bk-g' }, bk, was);
+
+    // 採点ずみの欄をタップ → 解き直せるようにもどす
+    inp.addEventListener('pointerdown', () => {
+      if (!inp.readOnly) return;
+      reopen(k);
+      requestAnimationFrame(() => inp.select());   // 前の答えを選んでおき，打てば置きかわる
+    });
+    // ○×をタップ → 切りかえ（別の言い方で合っていたときなど）
+    mark.addEventListener('click', () => {
+      const r = st.res[key(k)];
+      if (r === undefined) return;
+      st.ovr[key(k)] = !r;
+      st.res[key(k)] = !r;
+      paint(k);
+      save();
+      onChange?.();
+    });
 
     inp.addEventListener('input', e => {
       // 空欄でSpace → ○（日本語入力の全角空白・スマホの空白もここで拾う）
@@ -206,6 +217,7 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
     });
     inp.addEventListener('keydown', e => {
       const composing = e.isComposing || e.keyCode === 229;
+      if (inp.readOnly && e.key === 'Backspace') { e.preventDefault(); if (!e.repeat) reopen(k); return; }
       if (!quick) {
         if (e.key === 'Enter' && !composing) { e.preventDefault(); focusNext(inp); }
         return;
@@ -214,7 +226,7 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
         if (composing) return;                         // 変換中のEnterは確定だけ
         e.preventDefault();
         if (!e.repeat && !keyLock.on) advance(k, 'enter');
-      } else if (e.key === ' ' && !composing && inp.value === '') {
+      } else if (e.key === ' ' && !composing && (inp.value === '' || inp.readOnly)) {
         e.preventDefault();
         if (!e.repeat && !keyLock.on) advance(k, 'space');
       } else if (e.key === 'Backspace' && !composing && inp.value === '') {
@@ -222,15 +234,9 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
         if (!e.repeat) back(inp);
       }
     });
-    ovr.addEventListener('click', () => {
-      st.ovr[key(k)] = true;
-      st.res[key(k)] = true;
-      paint(k);
-      save();
-      onChange?.();
-    });
 
-    groups.set(k, { g, bk, inp });
+    groups.set(k, { g, bk, inp, mark, was });
+    paint(k);
     return g;
   }
 
@@ -276,6 +282,14 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
     prev.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
+  function reopen(k) {
+    delete st.res[key(k)];
+    delete st.ovr[key(k)];
+    paint(k);
+    save();
+    onChange?.();
+  }
+
   function renderRef(k, s) {
     const b = blanks[k];
     const suf = s ?? b?.s ?? '';
@@ -301,8 +315,14 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
         el.classList.toggle('ok', r === true);
         el.classList.toggle('ng', r === false);
       }
-      const exact = isCorrect({ a: blanks[k].a, s: blanks[k].s }, st.vals[key(k)]);
-      x.g.classList.toggle('ans-on', r === true && !exact);
+      if (x.inp) {
+        const graded = r !== undefined;
+        const typed = st.vals[key(k)] ?? '';
+        x.inp.readOnly = graded;
+        x.inp.value = graded ? blanks[k].a : typed;
+        fitInput(x.inp);
+        x.was.textContent = r === false && typed.trim() ? typed : '';
+      }
     }
     refreshRefs();
   }
@@ -326,10 +346,19 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
     keys, renderBlank, renderRef, paintAll, score,
     openedCount: () => opened.size,
     openAll(on) { keys.forEach(k => setOpen(k, on)); },
+    setReveal(on) {
+      for (const k of keys) {
+        const x = groups.get(k);
+        if (!x?.inp) continue;
+        x.inp.placeholder = on ? blanks[k].a : '';
+        fitInput(x.inp);
+      }
+    },
     check() {
       let got = 0;
       for (const k of keys) {
-        const ok = !!st.ovr[key(k)] || isCorrect(blanks[k], st.vals[key(k)]);
+        const o = st.ovr[key(k)];
+        const ok = typeof o === 'boolean' ? o : isCorrect(blanks[k], st.vals[key(k)]);
         st.res[key(k)] = ok;
         if (ok) got++;
       }
@@ -350,7 +379,7 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
       let first = null;
       for (const k of keys) {
         if (st.res[key(k)] !== false) continue;
-        delete st.vals[key(k)]; delete st.res[key(k)];
+        delete st.vals[key(k)]; delete st.res[key(k)]; delete st.ovr[key(k)];
         const x = groups.get(k);
         if (x?.inp) { x.inp.value = ''; fitInput(x.inp); first ??= x.inp; }
       }
@@ -389,7 +418,7 @@ function pageHeader(page) {
 function figure(src, alt) {
   const f = h('figure', { class: 'fig' },
     h('img', { src, alt, loading: 'lazy' }),
-    h('span', { class: 'fig-zoom' }, '🔍 タップで拡大'));
+    h('span', { class: 'fig-zoom' }, 'タップで拡大'));
   f.addEventListener('click', () => openZoom(src, alt));
   return f;
 }
@@ -451,14 +480,15 @@ function thunenFigure() {
 }
 
 // 帯グラフ（割合）
-const BAR_COLORS = ['#38bdf8', '#2dd4bf', '#818cf8', '#fbbf24', '#f472b6', '#a3e635'];
+const BAR_COLORS = ['#1a1a1a', '#474747', '#6e6e6e', '#949494', '#b8b8b8', '#d6d6d6'];
+const BAR_TEXT = ['#fff', '#fff', '#fff', '#111', '#111', '#111'];
 function barsFigure(bars, unit) {
   return h('div', { class: 'bars' }, bars.map(b => {
     const rest = Math.max(0, 100 - b.segs.reduce((n, [, v]) => n + v, 0));
     return h('div', { class: 'bars-item' },
       h('div', { class: 'bars-lab' }, h('b', null, b.label), h('small', null, b.sub)),
       h('div', { class: 'sbar' },
-        b.segs.map(([name, v], i) => h('span', { style: `width:${v}%;background:${BAR_COLORS[i % BAR_COLORS.length]}`, title: `${name} ${v.toFixed(1)}${unit}` }, v >= 5 ? v.toFixed(1) : '')),
+        b.segs.map(([name, v], i) => h('span', { style: `width:${v}%;background:${BAR_COLORS[i % BAR_COLORS.length]};color:${BAR_TEXT[i % BAR_TEXT.length]}`, title: `${name} ${v.toFixed(1)}${unit}` }, v >= 5 ? v.toFixed(1) : '')),
         h('span', { class: 'rest', style: `width:${rest}%` }, 'その他')),
       h('div', { class: 'bars-leg' }, b.segs.map(([name, v], i) =>
         h('span', null, h('i', { style: `background:${BAR_COLORS[i % BAR_COLORS.length]}` }), `${name} ${v.toFixed(1)}`))));
@@ -637,12 +667,11 @@ const KINDS = {
           if (correct) got++;
           const x = rowEls[r.id];
           x.cells.forEach((c, i) => c.classList.toggle('bad', on.has(i) && !ok.has(i)));
-          x.mk.textContent = correct ? '✓' : '✗';
-          x.mk.style.color = correct ? 'var(--ok)' : 'var(--ng)';
+          x.mk.textContent = correct ? '○' : '×';
           x.resEl.replaceChildren(
             h('span', { class: 'nm' }, x.full),
             h('span', null, r.hint),
-            h('span', { class: correct ? 'ok' : 'ng' }, correct ? '✓' : '✗'));
+            h('span', { class: correct ? 'ok' : 'ng' }, correct ? '○' : '×'));
         }
         grid.classList.add('checked', 'mdl-on');
         modelBtn.textContent = '解答を隠す';
@@ -723,8 +752,9 @@ const KINDS = {
       if (tk.t === 'blank') {
         const k = tk.k;
         const sv = h('span', { class: 'sv' });
+        const mk = h('span', { class: 'smk' });
         const el = h('span', { class: 'slot', role: 'button', tabindex: '0' },
-          h('span', { class: 'sn' }, CIRC[k] ?? k), sv, h('span', { class: 'sfix' }, '→ ' + q.blanks[k]));
+          h('span', { class: 'sn' }, CIRC[k] ?? k), sv, mk);
         el.addEventListener('click', () => {
           if (sel === k && st.vals[kv(k)]) {
             delete st.vals[kv(k)];
@@ -733,9 +763,11 @@ const KINDS = {
           }
           sel = k;
           paint();
+          ctx.rescore();
         });
-        slots[k] = { el, sv };
-        text.append(el);
+        const was = h('s', { class: 'bk-was' });
+        slots[k] = { el, sv, was };
+        text.append(el, was);
       } else if (tk.t === 'text') {
         text.append(tk.v);
       }
@@ -759,6 +791,7 @@ const KINDS = {
       const used = new Set(keys.map(k => st.vals[kv(k)]).filter(Boolean));
       for (const k of keys) {
         slots[k].sv.textContent = st.vals[kv(k)] ?? '';
+        slots[k].was.textContent = '';
         slots[k].el.classList.toggle('sel', sel === k);
       }
       chips.forEach(c => c.classList.toggle('used', used.has(c.textContent)));
@@ -778,6 +811,10 @@ const KINDS = {
           const ok = st.vals[kv(k)] === q.blanks[k];
           slots[k].el.classList.toggle('ok', ok);
           slots[k].el.classList.toggle('ng', !ok);
+          if (!ok) {
+            slots[k].sv.textContent = q.blanks[k];
+            slots[k].was.textContent = st.vals[kv(k)] ?? '';
+          }
           if (ok) got++;
         }
         return { got, total: keys.length };
@@ -974,10 +1011,10 @@ function renderFillPage(page) {
     ['input', 'sheet'].map(m => h('button', {
       type: 'button', class: m === mode ? 'on' : '',
       onclick: () => { if (m !== mode) { st.mode = m; save(); renderFillPage(page); } },
-    }, m === 'input' ? '✏️ 入力して解く' : '🟥 赤シートで確認')));
+    }, m === 'input' ? '入力して解く' : '隠して覚える')));
   const hint = mode === 'input'
     ? h('details', { class: 'keys-help' },
-        h('summary', null, '⌨ Enterで1問ずつ採点・Spaceで○・Backspaceで戻る'),
+        h('summary', null, 'キー操作　Enterで採点・Spaceで○・Backspaceで戻る'),
         h('ul', null,
           h('li', null, 'Enter（答えを打ってある）→ 採点して答えを表示。合っていれば○，ちがえば×'),
           h('li', null, 'Enter（空のまま）→ ×にして答えを表示'),
@@ -985,8 +1022,9 @@ function renderFillPage(page) {
           h('li', null, 'Backspace（空のまま）→ 1つ前の空欄に戻る（○×も取り消し）'),
           h('li', null, '変換中のEnterは確定だけ。確定のEnter → もう1回Enterで採点'),
           h('li', null, 'スマホのキーボードの改行・空白でも同じ。押しっぱなしでも連続で判定しない'),
-          h('li', null, '別の言い方で合っているときは「○にする」で正解に。下の「答え合わせ」で全部まとめて採点もできる')))
-    : h('p', { class: 'mode-hint' }, '赤いところをタップすると答えが見えます。もう一度タップで隠れます。');
+          h('li', null, '答えは入力欄に出る。○×はタップで切りかえ，採点ずみの欄をタップすると解き直せる'),
+          h('li', null, '下の「答え合わせ」で全部まとめて採点もできる')))
+    : h('p', { class: 'mode-hint' }, '黒いところをタップすると答えが見えます。もう一度タップで隠れます。');
 
   const body = h('div', { class: 'fill-body' });
   for (const sec of page.sections) {
@@ -1026,9 +1064,9 @@ function renderFillPage(page) {
     const wrong = fill.keys.filter(k => st.res[k] === false).length;
     const res = sc
       ? h('div', { class: 'bb-res' },
-          h('span', { style: `color:${sc.got === sc.total ? 'var(--ok)' : 'var(--text)'}` }, `正解 ${sc.got} / ${sc.total}`),
+          h('span', null, `正解 ${sc.got} / ${sc.total}`),
           h('div', { class: 'bar' }, h('i', { style: `width:${(sc.got / sc.total) * 100}%` })),
-          wrong ? h('button', { class: 'btn small warn', type: 'button', onclick: retryWrong }, `× ${wrong}問やり直す`) : null)
+          wrong ? h('button', { class: 'btn small warn', type: 'button', onclick: retryWrong }, `×の${wrong}問をやり直す`) : null)
       : null;
     bb.replaceChildren(
       res ?? '',
@@ -1059,6 +1097,7 @@ function renderFillPage(page) {
   function toggleReveal() {
     reveal = !reveal;
     body.classList.toggle('show-ans', reveal);
+    fill.setReveal(reveal);
     updateBar();
   }
 
@@ -1079,7 +1118,7 @@ function renderQuizPage(page) {
     const card = h('section', { class: 'q-card' });
     const state = h('span', { class: 'q-state' });
     const setState = r => {
-      state.textContent = r ? `${r.got === r.total ? '✓' : ''} ${r.got} / ${r.total}` : '';
+      state.textContent = r ? `${r.got === r.total ? '全問正解　' : ''}${r.got} / ${r.total}` : '';
       state.className = 'q-state' + (r && r.got === r.total ? ' good' : '');
     };
     const ctx = { rescore: () => { if (card.classList.contains('checked')) doCheck(); } };
@@ -1155,7 +1194,7 @@ function installBox() {
   if (isStandalone()) return null;
   if (installPrompt) {
     return h('div', { class: 'install' },
-      h('b', null, '📲 アプリとして追加できます'),
+      h('b', null, 'アプリとして追加できます'),
       h('p', null, 'ホーム画面から開けて，電波がなくても使えるようになります。'),
       h('button', { class: 'btn primary', type: 'button', onclick: async () => {
         installPrompt.prompt();
@@ -1166,7 +1205,7 @@ function installBox() {
   }
   if (isIOS()) {
     return h('div', { class: 'install' },
-      h('b', null, '📲 アプリとして使うには'),
+      h('b', null, 'アプリとして使うには'),
       h('p', null, 'Safariの共有ボタン（□↑）→「ホーム画面に追加」。ホーム画面から開けて，電波がなくても使えます。'));
   }
   return null;
