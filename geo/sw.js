@@ -3,7 +3,7 @@
 //   ・最初に全ファイルを保存しておき，オフラインでも開けるようにする
 //   ・つながっているときは最新を取りに行く（遅いときは保存分を使う）
 // ════════════════════════════════════════════
-const CACHE = 'geo-v4';
+const CACHE = 'geo-v5';
 const FILES = [
   './', './index.html', './app.js', './data.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',

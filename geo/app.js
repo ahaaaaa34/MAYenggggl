@@ -124,12 +124,29 @@ function fitInput(inp) {
   inp.style.width = Math.max(4.5, w + 1.4) + 'em';
 }
 
+// 入力欄が見えているなら画面は動かさない。隠れているときだけ，1回なめらかに少しだけ動かす
+//   （上のヘッダー・下のボタン・キーボードに隠れる分も考える）
+function reveal(el) {
+  const vv = window.visualViewport;
+  const vTop = vv ? vv.offsetTop : 0;
+  const vBottom = vTop + (vv ? vv.height : window.innerHeight);
+  const head = document.querySelector('.ph')?.getBoundingClientRect().bottom ?? 0;
+  const bar = document.querySelector('.bb')?.getBoundingClientRect().top ?? Infinity;
+  const top = Math.max(vTop, head) + 16;
+  const bottom = Math.min(vBottom, bar) - 16;
+  const r = el.getBoundingClientRect();
+  if (r.top >= top && r.bottom <= bottom) return;
+  const target = r.top < top ? top : top + (bottom - top) * 0.35;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollBy({ top: r.top - target, behavior: still ? 'auto' : 'smooth' });
+}
+
 function focusNext(inp) {
   const all = [...document.querySelectorAll('.bk-in')];
   const next = all.slice(all.indexOf(inp) + 1).find(i => !i.readOnly);
   if (next) {
-    next.focus();
-    next.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    next.focus({ preventScroll: true });
+    reveal(next);
   } else {
     inp.blur();
   }
@@ -277,9 +294,9 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
       save();
       onChange?.();
     }
-    prev.focus();
+    prev.focus({ preventScroll: true });
     prev.setSelectionRange(prev.value.length, prev.value.length);
-    prev.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    reveal(prev);
   }
 
   function reopen(k) {
@@ -1086,7 +1103,7 @@ function renderFillPage(page) {
     const first = fill.retryWrong();
     updateScore();
     updateBar();
-    if (first) { first.scrollIntoView({ block: 'center', behavior: 'smooth' }); first.focus({ preventScroll: true }); }
+    if (first) { first.focus({ preventScroll: true }); reveal(first); }
   }
   function resetAll() {
     if (!confirm('このページの入力をすべて消しますか？')) return;
