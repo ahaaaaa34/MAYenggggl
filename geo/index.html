@@ -69,10 +69,10 @@
     .home-title { font-size: 38px; font-weight: 700; letter-spacing: -0.5px; margin: 6px 0 6px; }
     .home-chapter { font-size: 14px; color: var(--sub); }
     .home-sum { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin: 10px 2px 12px; }
-    .home-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+    .home-list { display: flex; flex-direction: column; gap: 4px; }
     .pcard {
       display: flex; align-items: center; gap: 16px; width: 100%; text-align: left;
-      padding: 16px 2px; border-bottom: 1px solid var(--line); transition: background .12s;
+      padding: 12px 2px; border-radius: 12px; transition: background .12s;
     }
     .pcard:active { background: var(--surface); }
     .pcard-num {
@@ -132,8 +132,7 @@
 
     /* ═══════ FILL (一問一答) ═══════ */
     .sec-title { font-size: 17px; font-weight: 700; margin: 28px 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--ink); }
-    .row { border-bottom: 1px solid var(--line); padding: 12px 2px 14px; }
-    .row:last-child { border-bottom: none; }
+    .row { padding: 10px 2px 14px; }
     .row-label { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px; }
     .row-label span { font-size: 12px; font-weight: 600; color: var(--sub); }
     .row-label span:first-child::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 1px; background: var(--ink); margin-right: 6px; vertical-align: 2px; }
@@ -198,8 +197,7 @@
     .btn.small { flex: 0 0 auto; padding: 7px 12px; font-size: 13px; border-radius: 10px; }
 
     /* ═══════ QUIZ CARDS ═══════ */
-    .q-card { border-bottom: 1px solid var(--line); padding: 22px 2px 24px; }
-    .q-card:last-of-type { border-bottom: none; }
+    .q-card { padding: 22px 2px 26px; }
     .q-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
     .q-badge { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line2); color: var(--sub); }
     .q-badge.adv { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
@@ -318,8 +316,7 @@
     }
 
     /* hi / lo */
-    .hl-row { padding: 12px 0; border-top: 1px solid var(--line); }
-    .hl-row:first-child { border-top: none; }
+    .hl-row { padding: 10px 0 12px; }
     .hl-name { font-size: 15px; font-weight: 600; white-space: pre-line; }
     .hl-feat { font-size: 13px; color: var(--muted); margin: 3px 0 8px; line-height: 1.6; }
     .hl-cells { display: flex; flex-direction: column; gap: 8px; }
@@ -372,8 +369,7 @@
 
     /* pick */
     .pk-note { font-size: 12px; color: var(--muted); margin: 4px 0 6px; line-height: 1.7; }
-    .pk-item { padding: 10px 0; border-top: 1px solid var(--line); }
-    .pk-item:first-of-type { border-top: none; }
+    .pk-item { padding: 8px 0 10px; }
     .pk-row { display: flex; align-items: flex-start; gap: 10px; }
     .pk-label { font-size: 15px; font-weight: 600; min-width: 2.6em; padding-top: 7px; display: flex; flex-direction: column; gap: 2px; }
     .pk-seg { flex: 1; min-width: 0; display: flex; gap: 6px; flex-wrap: wrap; }
