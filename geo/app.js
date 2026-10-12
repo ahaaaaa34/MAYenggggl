@@ -177,7 +177,7 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
     if (mode === 'sheet') {
       const btn = h('button', { class: 'bk sheet', type: 'button', 'aria-label': `空欄${label}` },
         h('span', { class: 'bk-n' }, label),
-        h('span', { class: 'bk-mask' }, b.a),
+        h('span', { class: 'bk-rb' }, h('span', { class: 'bk-mask' }, b.a), b.y ? h('span', { class: 'bk-yomi' }, b.y) : null),
         b.s ? h('span', { class: 'bk-s' }, b.s) : null);
       btn.addEventListener('click', () => setOpen(k, !opened.has(k)));
       groups.set(k, { g: btn, bk: btn });
@@ -192,7 +192,8 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
     const mark = h('button', { class: 'bk-mark', type: 'button', tabindex: '-1', 'aria-label': '○×を切りかえる' });
     const was = h('s', { class: 'bk-was' });
     const bk = h('span', { class: 'bk' },
-      h('span', { class: 'bk-n' }, label), inp,
+      h('span', { class: 'bk-n' }, label),
+      h('span', { class: 'bk-rb' }, inp, b.y ? h('span', { class: 'bk-yomi', 'aria-hidden': 'true' }, b.y) : null),
       b.s ? h('span', { class: 'bk-s' }, b.s) : null,
       mark);
     const g = h('span', { class: 'bk-g' }, bk, was);
@@ -312,7 +313,7 @@ function createFill({ blanks, st, ns = '', mode = 'input', quick = false, onChan
     const suf = s ?? b?.s ?? '';
     const el = h('span', { class: 'ref' },
       h('span', { class: 'ref-q' }, `(${b?.label ?? k}${suf})`),
-      h('span', { class: 'ref-a' }, (b?.a ?? '') + suf));
+      h('span', { class: 'ref-a' }, b?.y ? h('ruby', null, b.a, h('rt', null, b.y)) : (b?.a ?? ''), suf));
     refs.push({ el, k });
     return el;
   }
